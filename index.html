@@ -60,6 +60,30 @@
                 max-height: 600px;
                 overflow: auto;
             }
+            @media (max-width: 600px) {
+                #tetrisCanvas {
+                    width: 90vw !important;
+                    height: 60vw !important;
+                    max-width: 100vw;
+                    max-height: 80vh;
+                }
+                #score, #aiPreviewText {
+                    position: static;
+                    width: auto;
+                    margin: 10px 0;
+                }
+                #startButton, #aiButton {
+                    position: static;
+                    width: 100%;
+                    margin: 5px 0;
+                    transform: none;
+                }
+                body {
+                    flex-direction: column;
+                    align-items: stretch;
+                    height: auto;
+                }
+            }
         </style>
     </head>
     <body>
@@ -68,6 +92,12 @@
         <button id="aiButton">KI zuschauen</button>
         <canvas id="tetrisCanvas" width="300" height="600"></canvas>
         <div id="aiPreviewText"></div>
+        <div id="mobileControls" style="display:none; text-align:center; margin-top:10px;">
+            <button id="leftBtn">◀️</button>
+            <button id="rotateBtn">🔄</button>
+            <button id="rightBtn">▶️</button>
+            <button id="downBtn">⬇️</button>
+        </div>
         <script>
             let canvas, ctx;
             let score = 0;
@@ -493,6 +523,76 @@
                 }
                 return true;
             }
+
+            // Mobile Steuerung
+            function setupMobileControls() {
+                const leftBtn = document.getElementById('leftBtn');
+                const rightBtn = document.getElementById('rightBtn');
+                const downBtn = document.getElementById('downBtn');
+                const rotateBtn = document.getElementById('rotateBtn');
+
+                if (leftBtn) {
+                    leftBtn.addEventListener('click', () => {
+                        movePiece({ key: 'ArrowLeft' });
+                    });
+                }
+                if (rightBtn) {
+                    rightBtn.addEventListener('click', () => {
+                        movePiece({ key: 'ArrowRight' });
+                    });
+                }
+                if (downBtn) {
+                    downBtn.addEventListener('click', () => {
+                        movePiece({ key: 'ArrowDown' });
+                    });
+                }
+                if (rotateBtn) {
+                    rotateBtn.addEventListener('click', () => {
+                        // Versuche das Teil zu drehen
+                        const rotated = rotateMatrix(currentPiece.shape);
+                        const oldShape = currentPiece.shape;
+                        currentPiece.shape = rotated;
+                        if (!canMove(0, 0)) {
+                            currentPiece.shape = oldShape; // Rückgängig machen, falls nicht möglich
+                        }
+                        drawBoard();
+                        drawPiece();
+                    });
+                }
+            }
+
+            window.addEventListener('resize', function() {
+                const isMobile = window.innerWidth <= 600;
+                const mobileControls = document.getElementById('mobileControls');
+                if (mobileControls) {
+                    mobileControls.style.display = isMobile ? 'flex' : 'none';
+                }
+            });
+
+            // Mobile Controls anzeigen, wenn Touchscreen erkannt wird
+            if ('ontouchstart' in window) {
+                document.getElementById('mobileControls').style.display = 'block';
+            }
+
+            // Touch-Events für Buttons
+            document.getElementById('leftBtn').addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                if (!aiActive) movePiece({key: 'ArrowLeft'});
+            });
+            document.getElementById('rightBtn').addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                if (!aiActive) movePiece({key: 'ArrowRight'});
+            });
+            document.getElementById('downBtn').addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                if (!aiActive) movePiece({key: 'ArrowDown'});
+            });
+            document.getElementById('rotateBtn').addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                if (!aiActive) movePiece({key: 'ArrowUp'});
+            });
+
+            setupMobileControls();
         </script>
     </body>
 </html>
