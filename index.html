@@ -1,0 +1,498 @@
+<html>
+    <head>
+        <title>Tetris Clone</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #f0f0f0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }
+            canvas {
+                border: 2px solid #333;
+                background-color: #fff;
+            }
+            #score {
+                position: absolute;
+                top: 20px;
+                left: 20px;
+                font-size: 24px;
+                color: #333;
+            }
+            #startButton {
+                position: absolute;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 10px 20px;
+                font-size: 18px;
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+            }
+            #startButton:hover {    
+                background-color: #45a049;
+            }
+            #aiButton {
+                position: absolute;
+                bottom: 60px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 10px 20px;
+                font-size: 18px;
+            }
+            #aiPreviewText {
+                position: absolute;
+                right: 20px;
+                top: 20px;
+                width: 220px;
+                background: #eee;
+                border: 1px solid #aaa;
+                font-size: 12px;
+                padding: 8px;
+                max-height: 600px;
+                overflow: auto;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="score">Score: 0</div>
+        <button id="startButton">Spiel starten</button>
+        <button id="aiButton">KI zuschauen</button>
+        <canvas id="tetrisCanvas" width="300" height="600"></canvas>
+        <div id="aiPreviewText"></div>
+        <script>
+            let canvas, ctx;
+            let score = 0;
+            let gameInterval;
+            let aiInterval;
+            let aiActive = false;
+            let aiMoveInterval;
+            const rows = 20;
+            const cols = 10;
+            const blockSize = 30;
+            const colors = ['#FF5733', '#33FF57', '#3357FF', '#F1C40F', '#8E44AD'];
+            let board = Array.from({ length: rows }, () => Array(cols).fill(0));
+            let currentPiece;
+            let currentPosition = { x: 0, y: 0 };
+            const pieces = [
+                [[1, 1, 1, 1]], // I
+                [[1, 1], [1, 1]], // O
+                [[0, 1, 0], [1, 1, 1]], // T
+                [[1, 0, 0], [1, 1, 1]], // L
+                [[0, 0, 1], [1, 1, 1]], // J
+                [[0, 1], [0, 1], [1, 1]], // S
+                [[1, 0], [1, 1], [0, 1]] // Z
+            ];
+            function drawBoard() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        if (board[r][c] !== 0) {
+                            ctx.fillStyle = colors[board[r][c] - 1];
+                            ctx.fillRect(c * blockSize, r * blockSize, blockSize, blockSize);
+                            ctx.strokeRect(c * blockSize, r * blockSize, blockSize, blockSize);
+                        }
+                    }
+                }
+            }
+            function drawPiece() {
+                if (!currentPiece) return;
+                ctx.fillStyle = colors[currentPiece.color - 1];
+                for (let r = 0; r < currentPiece.shape.length; r++) {
+                    for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                        if (currentPiece.shape[r][c]) {
+                            ctx.fillRect((currentPosition.x + c) * blockSize, (currentPosition.y + r) * blockSize, blockSize, blockSize);
+                            ctx.strokeRect((currentPosition.x + c) * blockSize, (currentPosition.y + r) * blockSize, blockSize, blockSize);
+                        }
+                    }
+                }
+            }
+            function createPiece() {
+                const randomIndex = Math.floor(Math.random() * pieces.length);
+                const shape = pieces[randomIndex];
+                const color = randomIndex + 1; // Color index starts from 1
+                currentPiece = { shape, color };
+                currentPosition = { x: Math.floor(cols / 2) - Math.floor(shape[0].length / 2), y: 0 };
+            }
+            function canMove(offsetX, offsetY) {
+                for (let r = 0; r < currentPiece.shape.length; r++) {
+                    for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                        if (currentPiece.shape[r][c]) {
+                            const newX = currentPosition.x + c + offsetX;
+                            const newY = currentPosition.y + r + offsetY;
+                            if (newX < 0 || newX >= cols || newY < 0 || newY >= rows || board[newY][newX] !== 0) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            function mergePiece() {
+                for (let r = 0; r < currentPiece.shape.length; r++) {
+                    for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                        if (currentPiece.shape[r][c]) {
+                            board[currentPosition.y + r][currentPosition.x + c] = currentPiece.color;
+                        }
+                    }
+                }
+            }
+            function clearLines() {
+                for (let r = rows - 1; r >= 0; r--) {
+                    if (board[r].every(cell => cell !== 0)) {
+                        board.splice(r, 1);
+                        board.unshift(Array(cols).fill(0));
+                        score += 10;
+                        document.getElementById('score').textContent = 'Score: ' + score;
+                    }
+                }
+            }
+            function gameOver() {
+                clearInterval(gameInterval);
+                if (aiActive) {
+                    resetGame();
+                } else {
+                    alert('Game Over! Your score: ' + score);
+                    resetGame();
+                }
+            }
+            function resetGame() {
+                board = Array.from({ length: rows }, () => Array(cols).fill(0));
+                score = 0;
+                document.getElementById('score').textContent = 'Score: ' + score;
+                createPiece();
+                drawBoard();
+                drawPiece();    
+            }
+            function startGame() {
+                resetGame();
+                gameInterval = setInterval(() => {
+                    if (canMove(0, 1)) {
+                        currentPosition.y++;
+                    } else {
+                        mergePiece();
+                        clearLines();
+                        createPiece();
+                        if (!canMove(0, 0)) {
+                            gameOver();
+                        }
+                    }
+                    drawBoard();
+                    drawPiece();
+                }, 1000);
+            }
+            function movePiece(event) {
+                if (!currentPiece) return;
+                switch (event.key) {
+                    case 'ArrowLeft':
+                        if (canMove(-1, 0)) currentPosition.x--;
+                        break;
+                    case 'ArrowRight':
+                        if (canMove(1, 0)) currentPosition.x++;
+                        break;
+                    case 'ArrowDown':
+                        if (canMove(0, 1)) {
+                            currentPosition.y++;
+                        } else {
+                            mergePiece();
+                            clearLines();
+                            createPiece();
+                            if (!canMove(0, 0)) {
+                                gameOver();
+                            }
+                        }
+                        break;
+                    case 'ArrowUp':
+                        // Versuche das Teil zu drehen
+                        const rotated = rotateMatrix(currentPiece.shape);
+                        const oldShape = currentPiece.shape;
+                        currentPiece.shape = rotated;
+                        if (!canMove(0, 0)) {
+                            currentPiece.shape = oldShape; // Rückgängig machen, falls nicht möglich
+                        }
+                        break;
+                }
+                drawBoard();
+                drawPiece();
+            }
+            // Dreht eine Matrix (2D-Array) um 90 Grad im Uhrzeigersinn
+            function rotateMatrix(matrix) {
+                const rows = matrix.length;
+                const cols = matrix[0].length;
+                let rotated = [];
+                for (let c = 0; c < cols; c++) {
+                    rotated[c] = [];
+                    for (let r = rows - 1; r >= 0; r--) {
+                        rotated[c][rows - 1 - r] = matrix[r][c];
+                    }
+                }
+                return rotated;
+            }
+            let heuristics = {
+                linesCleared: 100,
+                holes: -7,
+                aggregateHeight: -2,
+                bumpiness: -2,
+                maxHeight: -1
+            };
+
+            function evaluateBoard(testBoard) {
+                let holes = 0;
+                let aggregateHeight = 0;
+                let maxHeight = 0;
+                let linesCleared = 0;
+                let bumpiness = 0;
+                let heights = [];
+
+                // Spaltenhöhen und Löcher berechnen
+                for (let c = 0; c < cols; c++) {
+                    let blockFound = false;
+                    let colHeight = 0;
+                    for (let r = 0; r < rows; r++) {
+                        if (testBoard[r][c]) {
+                            if (!blockFound) {
+                                colHeight = rows - r;
+                                aggregateHeight += colHeight;
+                                if (colHeight > maxHeight) maxHeight = colHeight;
+                                blockFound = true;
+                            }
+                        } else if (blockFound) {
+                            holes++;
+                        }
+                    }
+                    heights[c] = colHeight;
+                }
+
+                // Bumpiness berechnen
+                for (let c = 0; c < cols - 1; c++) {
+                    bumpiness += Math.abs(heights[c] - heights[c + 1]);
+                }
+
+                // Zeilen zählen, die komplett gefüllt sind
+                for (let r = 0; r < rows; r++) {
+                    if (testBoard[r].every(cell => cell !== 0)) {
+                        linesCleared++;
+                    }
+                }
+
+                // Gewichtung: Passe die Werte nach Bedarf an!
+                return linesCleared * heuristics.linesCleared +
+                       holes * heuristics.holes +
+                       aggregateHeight * heuristics.aggregateHeight +
+                       bumpiness * heuristics.bumpiness +
+                       maxHeight * heuristics.maxHeight;
+            }
+
+            function cloneBoard(board) {
+                return board.map(row => row.slice());
+            }
+
+            function getAllMoves(piece) {
+                let moves = [];
+                let shape = piece.shape;
+                for (let rot = 0; rot < 4; rot++) {
+                    let minX = -shape[0].length + 1;
+                    let maxX = cols - 1;
+                    for (let x = minX; x <= maxX; x++) {
+                        let y = 0;
+                        while (canMoveSim(shape, x, y + 1)) y++;
+                        if (canMoveSim(shape, x, y)) {
+                            moves.push({shape: shape.map(row => row.slice()), x, y, rotation: rot});
+                        }
+                    }
+                    shape = rotateMatrix(shape);
+                }
+                return moves;
+            }
+
+            function canMoveSim(shape, x, y) {
+                for (let r = 0; r < shape.length; r++) {
+                    for (let c = 0; c < shape[r].length; c++) {
+                        if (shape[r][c]) {
+                            let newX = x + c;
+                            let newY = y + r;
+                            if (newX < 0 || newX >= cols || newY < 0 || newY >= rows || board[newY][newX] !== 0) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+
+            let aiMoveQueue = [];
+
+            function aiStep() {
+                if (!currentPiece) return;
+
+                if (aiMoveQueue.length > 0) {
+                    let move = aiMoveQueue.shift();
+                    movePiece({ key: move });
+                    return;
+                }
+
+                let bestScore = -Infinity;
+                let bestMove = null;
+                let piece = { shape: currentPiece.shape.map(row => row.slice()) };
+                let moves = getAllMoves(piece);
+
+                // Bewertung für jeden Zug berechnen
+                let scores = [];
+                for (let move of moves) {
+                    let testBoard = cloneBoard(board);
+                    for (let r = 0; r < move.shape.length; r++) {
+                        for (let c = 0; c < move.shape[r].length; c++) {
+                            if (move.shape[r][c] && testBoard[move.y + r] && testBoard[move.y + r][move.x + c] !== undefined) {
+                                testBoard[move.y + r][move.x + c] = currentPiece.color;
+                            }
+                        }
+                    }
+                    let score = evaluateBoard(testBoard);
+                    scores.push(score);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                }
+
+                // KI-Vorschau als Text anzeigen
+                showAIPreviewText(moves, scores);
+
+                if (bestMove) {
+                    aiMoveQueue = [];
+                    let rotations = 0;
+                    let testShape = currentPiece.shape;
+                    while (rotations < 4 && !shapesEqual(testShape, bestMove.shape)) {
+                        testShape = rotateMatrix(testShape);
+                        rotations++;
+                    }
+                    for (let i = 0; i < rotations; i++) aiMoveQueue.push('ArrowUp');
+                    let dx = bestMove.x - currentPosition.x;
+                    let dir = dx > 0 ? 'ArrowRight' : 'ArrowLeft';
+                    for (let i = 0; i < Math.abs(dx); i++) aiMoveQueue.push(dir);
+                    aiMoveQueue.push('ArrowDown');
+                }
+            }
+
+            // Hilfsfunktion zum Vergleichen von Shapes
+            function shapesEqual(a, b) {
+                if (a.length !== b.length) return false;
+                for (let r = 0; r < a.length; r++) {
+                    if (a[r].length !== b[r].length) return false;
+                    for (let c = 0; c < a[r].length; c++) {
+                        if (a[r][c] !== b[r][c]) return false;
+                    }
+                }
+                return true;
+            }
+
+            function startAI() {
+                if (aiActive) return;
+                aiActive = true;
+                resetGame();
+                aiInterval = setInterval(aiStep, 200);
+                gameInterval = setInterval(function() {
+                    if (!aiActive) return;
+                    movePiece({key: 'ArrowDown'});
+                }, 200);
+                aiMoveInterval = setInterval(function() {
+                    if (!aiActive) return;
+                    if (aiMoveQueue.length > 0) {
+                        let move = aiMoveQueue.shift();
+                        movePiece({ key: move });
+                    }
+                }, 50);
+            }
+
+            function stopAI() {
+                aiActive = false;
+                clearInterval(aiInterval);
+                clearInterval(gameInterval);
+                clearInterval(aiMoveInterval);
+            }
+
+            window.onload = function() {
+                canvas = document.getElementById('tetrisCanvas');
+                ctx = canvas.getContext('2d');
+                drawBoard();
+                drawPiece();
+            };
+
+            document.getElementById('startButton').onclick = function() {
+                stopAI(); // Falls KI läuft, stoppen
+                startGame();
+            };
+
+            document.getElementById('aiButton').onclick = startAI;
+
+            window.addEventListener('keydown', function(event) {
+                // Nur wenn keine KI aktiv ist, darf der Spieler steuern
+                if (!aiActive) {
+                    movePiece(event);
+                }
+            });
+
+            function showAIPreviewText(moves, scores) {
+                const previewDiv = document.getElementById('aiPreviewText');
+                if (!previewDiv) return;
+                let html = "<b>KI prüft Züge:</b><br>";
+                for (let i = 0; i < moves.length; i++) {
+                    const move = moves[i];
+                    const score = Number(scores[i]);
+                    const rot = (move.rotation !== undefined) ? move.rotation : '?';
+                    if (score > 0) {
+                        html += `<span style="color: #ff00ff; font-weight: bold; text-decoration: underline;">Rotation: ${rot} | X: ${move.x} | Bewertung: ${score}</span><br>`;
+                    } else {
+                        html += `Rotation: ${rot} | X: ${move.x} | Bewertung: ${score}<br>`;
+                    }
+                }
+                previewDiv.innerHTML = html;
+            }
+            function countFittingPieces(testBoard) {
+                let count = 0;
+                for (let i = 0; i < pieces.length; i++) {
+                    let found = false;
+                    let shape = pieces[i];
+                    for (let rot = 0; rot < 4; rot++) {
+                        for (let x = -shape[0].length + 1; x < cols; x++) {
+                            for (let y = 0; y < rows; y++) {
+                                if (canMoveSimBoard(testBoard, shape, x, y)) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (found) break;
+                        }
+                        if (found) break;
+                        shape = rotateMatrix(shape);
+                    }
+                    if (found) count++;
+                }
+                return count;
+            }
+
+            function canMoveSimBoard(board, shape, x, y) {
+                for (let r = 0; r < shape.length; r++) {
+                    for (let c = 0; c < shape[r].length; c++) {
+                        if (shape[r][c]) {
+                            let newX = x + c;
+                            let newY = y + r;
+                            if (newX < 0 || newX >= cols || newY < 0 || newY >= rows || board[newY][newX] !== 0) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+        </script>
+    </body>
+</html>
