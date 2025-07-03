@@ -61,12 +61,6 @@
                 overflow: auto;
             }
             @media (max-width: 600px) {
-                #tetrisCanvas {
-                    width: 90vw !important;
-                    height: 60vw !important;
-                    max-width: 100vw;
-                    max-height: 80vh;
-                }
                 #score, #aiPreviewText {
                     position: static;
                     width: auto;
@@ -107,7 +101,7 @@
             let aiMoveInterval;
             const rows = 20;
             const cols = 10;
-            const blockSize = 30;
+            let blockSize = 30;
             const colors = ['#FF5733', '#33FF57', '#3357FF', '#F1C40F', '#8E44AD'];
             let board = Array.from({ length: rows }, () => Array(cols).fill(0));
             let currentPiece;
@@ -449,12 +443,46 @@
                 clearInterval(aiMoveInterval);
             }
 
+            function resizeCanvas() {
+                // Seitenverhältnis des Spielfelds
+                const aspect = cols / rows;
+                let w = window.innerWidth * 0.95;
+                let h = window.innerHeight * 0.8;
+
+                // Passe Breite und Höhe so an, dass das Seitenverhältnis erhalten bleibt
+                if (w / h > aspect) {
+                    w = h * aspect;
+                } else {
+                    h = w / aspect;
+                }
+
+                // Runde auf ganze Pixel und setze Canvas-Größe
+                canvas.width = Math.floor(w);
+                canvas.height = Math.floor(h);
+
+                // Passe blockSize an neue Canvas-Größe an
+                blockSize = Math.floor(canvas.width / cols);
+
+                drawBoard();
+                drawPiece();
+            }
+
             window.onload = function() {
                 canvas = document.getElementById('tetrisCanvas');
                 ctx = canvas.getContext('2d');
+                resizeCanvas();
                 drawBoard();
                 drawPiece();
             };
+
+            window.addEventListener('resize', function() {
+                resizeCanvas();
+                const isMobile = window.innerWidth <= 600;
+                const mobileControls = document.getElementById('mobileControls');
+                if (mobileControls) {
+                    mobileControls.style.display = isMobile ? 'flex' : 'none';
+                }
+            });
 
             document.getElementById('startButton').onclick = function() {
                 stopAI(); // Falls KI läuft, stoppen
